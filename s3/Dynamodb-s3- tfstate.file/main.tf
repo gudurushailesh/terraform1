@@ -1,5 +1,7 @@
 provider "aws" {
   region     = "${var.region}"
+  access_key = "access_key"
+  secret_key = "secret_key"
 }
 
 #1 -this will create a S3 bucket in AWS
