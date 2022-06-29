@@ -1,0 +1,136 @@
+How to manage terraform state in amazon s3 bucket?
+
+note :  https://www.coachdevops.com/2021/05/how-to-store-terrafrom-state-file-in-s3.html
+
+Pre-requistes:
+-----------------------
+
+.Make sure Terraform is setup. In this example, we are using Ubuntu 18.0.4
+.Install AWS CLI
+.AWS access keys and secret keys have been configured using AWS CLI.
+
+Steps:
+-------------
+First setup your access keys, secret keys and region code locally.
+
+Perform below commands where you have installed Terraform:
+---------------------------------------------------------------------------------------------------
+
+>aws configure    ((Provide Access keys, secret keys and region code))
+>mkdir project-terraform
+>cd project-terraform
+
+First let us create necessary terraform files.
+-------------------------------------------------------------------
+Create tf files:-
+
+>sudo vi variables.tf
+
+
+variable "region" {
+    default = "us-east-2"
+}
+
+variable "instance_type" {
+    default = "t2.micro"
+} 
+
+>sudo vi main.tf
+
+
+provider "aws" {
+  region     = "${var.region}"
+}
+
+#1 -this will create a S3 bucket in AWS
+resource "aws_s3_bucket" "terraform_state_s3" {
+  #make sure you give unique bucket name
+  bucket = "terraform-coachdevops-state" 
+  force_destroy = true
+# Enable versioning to see full revision history of our state files
+  versioning {
+         enabled = true
+        }
+
+# Enable server-side encryption by default
+server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        sse_algorithm = "AES256"
+      }
+    }
+  }
+}
+
+# 2 - this Creates Dynamo Table
+resource "aws_dynamodb_table" "terraform_locks" {
+# Give unique name for dynamo table name
+  name         = "tf-up-and-run-locks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID"
+        attribute {
+         name = "LockID"
+         type = "S"
+      }
+}
+
+*now let us initialize terraform.
+-------------------------------------------------
+
+>terraform init
+>terraform apply
+>ls -al
+
+>sudo vi main.tf
+
+
+#Step 3 - Creates S3 backend
+terraform {
+  backend "s3" {
+    #Replace this with your bucket name!
+    bucket         = "terraform-coachdevops-state"
+    key            = "dc/s3/terraform.tfstate"
+    region         = "us-east-2"
+    #Replace this with your DynamoDB table name!
+    dynamodb_table = "tf-up-and-run-locks"
+    encrypt        = true
+    }
+}
+
+
+>terraform init 
+
+*and then type yes and enter. Now you see local state file has 0 bytes(empty)
+*Now login to AWS console, Click on S3, Click on the bucket name
+*Now you should be able to see tfstate file in S3.
+
+
+How to perform Destroy?
+----------------------------------------------
+
+>sudo vi main.tf
+
+/*
+
+terraform {
+  backend "s3" {
+    #Replace this with your bucket name!
+    bucket         = "terraform-coachdevops-state"
+    key            = "dc/s3/terraform.tfstate"
+    region         = "us-east-2"
+    #Replace this with your DynamoDB table name!
+    dynamodb_table = "tf-up-and-run-locks"
+    encrypt        = true
+    }
+}
+
+*/
+
+** We need to initialize again. so type below command
+--------------------------------------------------------------------------------------
+
+>terraform init -migrate-state
+>terraform destroy
+
+
+**************************---------------------------------------------------------------*****************************************
